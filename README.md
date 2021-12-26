@@ -2,8 +2,8 @@
 A simple wrapper that is just executing [homebrew_launcher_installer](https://github.com/wiiu-env/homebrew_launcher_installer).
 
 ## Usage
-Place the `50_hbl_installer.rpx` in the `[ENVIROMENT]/modules/setup` folder and run the [EnvironmentLoader](https://github.com/wiiu-env/EnvironmentLoader).
-Requires [MochaPayload](https://github.com/wiiu-env/MochaPayload) as a setup module in `[ENVIROMENT]/modules/setup` when coldbooting.
+Place the `50_hbl_installer.rpx` in the `[ENVIRONMENT]/modules/setup` folder and run the [EnvironmentLoader](https://github.com/wiiu-env/EnvironmentLoader).
+Requires [MochaPayload](https://github.com/wiiu-env/MochaPayload) as a setup module in `[ENVIRONMENT]/modules/setup` when coldbooting.
 Read the intructions in the [original repo](https://github.com/wiiu-env/homebrew_launcher_installer) for further usage. 
 TLDR: Put the [homebrew_launcher.elf](https://github.com/dimok789/homebrew_launcher) in `sd:/wiiu/apps/homebrew_launcher/homebrew_launcher.elf`. When coldbooting you need to open the Mii Maker to start it.
 
