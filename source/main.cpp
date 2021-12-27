@@ -48,28 +48,11 @@ bool getQuickBoot() {
         CCRAppLaunchParam data;    // load sys caffeine data
         // load app launch param
         CCRSysCaffeineGetAppLaunchParam(&data);
-        
-        nn::act::Initialize();        
-        for(int i = 0; i < 13; i++){
-            char uuid[16];
-            auto result = nn::act::GetUuidEx(uuid, i);            
-            if(result.IsSuccess()){                
-                if( memcmp(uuid, data.uuid, 8) == 0) {
-                    DEBUG_FUNCTION_LINE("Load Console account %d", i);
-                    nn::act::LoadConsoleAccount(i, 0, 0, 0);
-                    break;
-                }
-            }
-        }        
-        nn::act::Finalize();
 
         // get launch info for id
         nn::sl::LaunchInfo info;
-        database->GetLaunchInfoById(&info, data.titleId);
-
-        // info.titleId
-        OSReport("Quick boot into: %016llX\n", info.titleId);
-
+        auto result = database->GetLaunchInfoById(&info, data.titleId);
+        
         delete database;
         delete fileStream;
 
@@ -77,17 +60,49 @@ bool getQuickBoot() {
 
         nn::sl::Finalize();
         
+        if(!result.IsSuccess()) {
+            DEBUG_FUNCTION_LINE("GetLaunchInfoById failed.");
+            return false;
+        }
+
+        if( info.titleId == 0x0005001010040000L || 
+            info.titleId == 0x0005001010040100L ||
+            info.titleId == 0x0005001010040200L) {
+            DEBUG_FUNCTION_LINE("Skip quick booting into the Wii U Menu");
+            return false;
+        }
+        if(!SYSCheckTitleExists(info.titleId)) {
+            DEBUG_FUNCTION_LINE("Title %016lLX doesn't exist", info.titleId);
+            return false;
+        }
+        
         MCPTitleListType titleInfo;
         int32_t handle = MCP_Open();
-        MCP_GetTitleInfo(handle, info.titleId, &titleInfo);
+        auto err = MCP_GetTitleInfo(handle, info.titleId, &titleInfo);
         MCP_Close(handle);
-        ACPAssignTitlePatch(&titleInfo);                 
-       _SYSLaunchTitleWithStdArgsInNoSplash(info.titleId, nullptr);
+        if(err == 0) {
+            nn::act::Initialize();        
+            for(int i = 0; i < 13; i++){
+                char uuid[16];
+                auto result = nn::act::GetUuidEx(uuid, i);            
+                if(result.IsSuccess()){                
+                    if( memcmp(uuid, data.uuid, 8) == 0) {
+                        DEBUG_FUNCTION_LINE("Load Console account %d", i);
+                        nn::act::LoadConsoleAccount(i, 0, 0, 0);
+                        break;
+                    }
+                }
+            }        
+            nn::act::Finalize();
+
+            ACPAssignTitlePatch(&titleInfo);                 
+            _SYSLaunchTitleWithStdArgsInNoSplash(info.titleId, nullptr);
+            return true;
+        }
        
-       
-        return true;        
+        return false;
     } else {
-        OSReport("No quick boot\n");
+        DEBUG_FUNCTION_LINE("No quick boot");
     }
     return false;
 }
@@ -120,8 +135,19 @@ int main(int argc, char **argv) {
     
     InstallHBL();
     
-    if(!getQuickBoot())  { 
-        bootHomebrewLauncher();
+    if(getQuickBoot())  { 
+        return 0;
+    }
+    
+    nn::act::Initialize();
+    nn::act::SlotNo slot = nn::act::GetSlotNo();
+    nn::act::SlotNo defaultSlot = nn::act::GetDefaultAccount();
+    nn::act::Finalize();
+
+    if (defaultSlot) { //normal menu boot
+        SYSLaunchMenu();
+    } else { //show mii select
+        _SYSLaunchMenuWithCheckingAccount(slot);
     }
 
     return 0;
