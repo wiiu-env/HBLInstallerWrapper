@@ -33,8 +33,8 @@ CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__
 
 CXXFLAGS	:= $(CFLAGS) -std=c++20 
 
-ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	=	-g $(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map)
+ASFLAGS	:=	-g $(ARCH) -mregnames
+LDFLAGS	=	-g $(ARCH) $(RPXSPECS) --entry=_start -Wl,-Map,$(notdir $*.map)
 
 LIBS	:= -lwut -lz
 
@@ -80,7 +80,7 @@ endif
 
 export OFILES_BIN	:=	$(addsuffix .o,$(BINFILES))
 export OFILES_SRC	:=	$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
-export OFILES 	:=	$(OFILES_BIN) $(OFILES_SRC) payload.elf.o
+export OFILES 	:=	$(OFILES_BIN) $(OFILES_SRC) sd_loader.elf.o
 export HFILES_BIN	:=	$(addsuffix .h,$(subst .,_,$(BINFILES)))
 
 export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
@@ -96,13 +96,13 @@ all: $(BUILD)
 
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
-	make -C homebrew_launcher_installer
+	make -C homebrew_launcher_installer/sd_loader
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #-------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	make clean -C homebrew_launcher_installer
+	make clean -C homebrew_launcher_installer/sd_loader
 	@rm -fr $(BUILD) $(TARGET).rpx $(TARGET).elf
 
 #-------------------------------------------------------------------------------
@@ -115,23 +115,23 @@ DEPENDS	:=	$(OFILES:.o=.d)
 # main targets
 #-------------------------------------------------------------------------------
 
-hbl_installer_payload := ../homebrew_launcher_installer/payload.elf
+sd_loader := ../homebrew_launcher_installer/sd_loader/sd_loader.elf
 
 all	:	 $(OUTPUT).rpx
 
-$(hbl_installer_payload): 
-	make -C ../homebrew_launcher_installer
+$(sd_loader): 
+	make -C ../homebrew_launcher_installer/sd_loader
 
 $(OUTPUT).rpx	:	$(OUTPUT).elf
 $(OUTPUT).elf	:   $(OFILES)
-$(OFILES)       :   hbl_installer_payload.h
+$(OFILES)       :   sd_loader.h
 
 $(OFILES_SRC)	: $(HFILES_BIN)
 
 #-------------------------------------------------------------------------------
 # you need a rule like this for each extension you use as binary data
 #-------------------------------------------------------------------------------
-hbl_installer_payload.h: $(hbl_installer_payload)
+sd_loader.h: $(sd_loader)
 	@bin2s -a 32 -H `(echo $(<F) | tr . _)`.h $< | $(AS) -o $(<F).o
 	@echo '#pragma once'  > $@
 	@printf '#include "' >> $@
