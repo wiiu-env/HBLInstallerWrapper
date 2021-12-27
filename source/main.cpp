@@ -12,6 +12,8 @@
 #include <nn/sl/LaunchInfoDatabase.h>
 #include <nn/ccr/sys_caffeine.h>
 
+#include <coreinit/dynload.h>
+
 #include <nn/act/client_cpp.h>
 #include "hbl_install.h"
 #include "utils.h"
@@ -20,11 +22,6 @@
 #include <whb/log_module.h>
 #include <whb/log_udp.h>
 #include <whb/log_cafe.h>
-
-extern "C" void Initialize__Q2_2nn3spmFv();
-extern "C" void SetAutoFatal__Q2_2nn3spmFb(bool);
-extern "C" void SetExtendedStorage__Q2_2nn3spmFQ3_2nn3spm12StorageIndex(int*);
-extern "C" void SetDefaultExtendedStorageVolumeId__Q2_2nn3spmFRCQ3_2nn3spm8VolumeId(int*);
 
 bool getQuickBoot() {
     auto bootCheck = CCRSysCaffeineBootCheck();
@@ -52,7 +49,7 @@ bool getQuickBoot() {
         // get launch info for id
         nn::sl::LaunchInfo info;
         auto result = database->GetLaunchInfoById(&info, data.titleId);
-        
+
         delete database;
         delete fileStream;
 
@@ -72,7 +69,7 @@ bool getQuickBoot() {
             return false;
         }
         if(!SYSCheckTitleExists(info.titleId)) {
-            DEBUG_FUNCTION_LINE("Title %016lLX doesn't exist", info.titleId);
+            DEBUG_FUNCTION_LINE("Title %016llX doesn't exist", info.titleId);
             return false;
         }
         
@@ -107,16 +104,69 @@ bool getQuickBoot() {
     return false;
 }
 
+
+struct WUT_PACKED VolumeInfo
+{
+   WUT_UNKNOWN_BYTES(0xAC);
+   char volumeId[16];
+   WUT_UNKNOWN_BYTES(0x100);
+};
+WUT_CHECK_OFFSET(VolumeInfo, 0xAC, volumeId);
+WUT_CHECK_SIZE(VolumeInfo, 444);
+
+
+extern "C" uint32_t FSGetVolumeInfo(FSClient*, FSCmdBlock*, const char* path, VolumeInfo* data, FSErrorFlag  errorMask);
+
+extern "C" void Initialize__Q2_2nn3spmFv();
+extern "C" void SetAutoFatal__Q2_2nn3spmFb(bool);
+extern "C" void SetExtendedStorage__Q2_2nn3spmFQ3_2nn3spm12StorageIndex(uint64_t*);
+extern "C" void SetDefaultExtendedStorageVolumeId__Q2_2nn3spmFRCQ3_2nn3spm8VolumeId(char *);
+extern "C" uint32_t FindStorageByVolumeId__Q2_2nn3spmFPQ3_2nn3spm12StorageIndexRCQ3_2nn3spm8VolumeId(uint64_t *, char *);
+
 static void initExternalStorage(void) {
     Initialize__Q2_2nn3spmFv();
-    SetAutoFatal__Q2_2nn3spmFb(false);
+   
+    FSCmdBlock cmdBlock;
+    FSInitCmdBlock(&cmdBlock);
+    
+    VolumeInfo volumeInfo;
 
-    int storageIndex[2]{};
-    SetExtendedStorage__Q2_2nn3spmFQ3_2nn3spm12StorageIndex(storageIndex);
-
-    int volumeId[4]{};
-    SetDefaultExtendedStorageVolumeId__Q2_2nn3spmFRCQ3_2nn3spm8VolumeId(volumeId);
+    auto *fsClient = (FSClient *) memalign(0x40, sizeof(FSClient));
+    memset(fsClient, 0, sizeof(*fsClient));
+    FSAddClient(fsClient, FS_ERROR_FLAG_NONE);
+    
+    char volumePaths[][19] =
+    { "/vol/storage_usb01",
+      "/vol/storage_usb02",
+      "/vol/storage_usb03",
+    };
+    
+    bool found = false;
+    for(auto path : volumePaths) {        
+        DEBUG_FUNCTION_LINE("Check if %s is connected", path);
+        if(FSGetVolumeInfo(fsClient, &cmdBlock, path, &volumeInfo, FS_ERROR_FLAG_ALL) == 0){
+            DEBUG_FUNCTION_LINE("Set DefaultExtendedStorage to %s", volumeInfo.volumeId);
+            SetDefaultExtendedStorageVolumeId__Q2_2nn3spmFRCQ3_2nn3spm8VolumeId(volumeInfo.volumeId);
+            uint64_t storageIndex = 0;
+            FindStorageByVolumeId__Q2_2nn3spmFPQ3_2nn3spm12StorageIndexRCQ3_2nn3spm8VolumeId(&storageIndex, volumeInfo.volumeId);
+            SetExtendedStorage__Q2_2nn3spmFQ3_2nn3spm12StorageIndex(&storageIndex);
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        DEBUG_FUNCTION_LINE("Fallback to empty ExtendedStorage");
+        char empty[16];
+        empty[0] = '\0';
+        SetDefaultExtendedStorageVolumeId__Q2_2nn3spmFRCQ3_2nn3spm8VolumeId(empty);
+                
+        uint64_t storageIndex = 0;
+        SetExtendedStorage__Q2_2nn3spmFQ3_2nn3spm12StorageIndex(&storageIndex);
+    }
+    
+    FSDelClient(fsClient, FS_ERROR_FLAG_ALL);    
 }
+
 
 void bootHomebrewLauncher(void) {    
     uint64_t titleId = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_MII_MAKER);
@@ -131,6 +181,7 @@ int main(int argc, char **argv) {
         WHBLogCafeInit();
         WHBLogUdpInit();
     }
+    
     initExternalStorage();
     
     InstallHBL();
