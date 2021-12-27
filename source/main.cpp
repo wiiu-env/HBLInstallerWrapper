@@ -1,69 +1,128 @@
-#include <string.h>
-#include <coreinit/title.h>
-#include <sysapp/title.h>
+#include <stdint.h>
+#include <malloc.h>
+#include <cstring>
+#include <proc_ui/procui.h>
 #include <sysapp/launch.h>
-#include <coreinit/ios.h>
-#include <coreinit/cache.h>
-#include "../homebrew_launcher_installer/src/elf_abi.h"
-#include "payload_elf.h"
+#include <sysapp/title.h>
+#include <coreinit/mcp.h>
+#include <coreinit/debug.h>
+#include <nn/acp/title.h>
+#include <nn/sl/common.h>
+#include <nn/sl/FileStream.h>
+#include <nn/sl/LaunchInfoDatabase.h>
+#include <nn/ccr/sys_caffeine.h>
 
-static unsigned int load_elf_image (const uint8_t* elfstart) {
-    Elf32_Ehdr *ehdr;
-    Elf32_Phdr *phdrs;
-    unsigned char *image;
-    int i;
+#include <nn/act/client_cpp.h>
+#include "hbl_install.h"
+#include "utils.h"
+#include "logger.h"
 
-    ehdr = (Elf32_Ehdr *) elfstart;
+#include <whb/log_module.h>
+#include <whb/log_udp.h>
+#include <whb/log_cafe.h>
 
-    if(ehdr->e_phoff == 0 || ehdr->e_phnum == 0)
-        return 0;
+extern "C" void Initialize__Q2_2nn3spmFv();
+extern "C" void SetAutoFatal__Q2_2nn3spmFb(bool);
+extern "C" void SetExtendedStorage__Q2_2nn3spmFQ3_2nn3spm12StorageIndex(int*);
+extern "C" void SetDefaultExtendedStorageVolumeId__Q2_2nn3spmFRCQ3_2nn3spm8VolumeId(int*);
 
-    if(ehdr->e_phentsize != sizeof(Elf32_Phdr))
-        return 0;
+bool getQuickBoot() {
+    auto bootCheck = CCRSysCaffeineBootCheck();
+    if (bootCheck == 0) {
+        nn::sl::Initialize(MEMAllocFromDefaultHeapEx, MEMFreeToDefaultHeap);
+        char path[0x80];
+        nn::sl::GetDefaultDatabasePath(path, 0x80, 0x00050010, 0x10066000);
+        FSCmdBlock cmdBlock;
+        FSInitCmdBlock(&cmdBlock);
 
-    phdrs = (Elf32_Phdr*)(elfstart + ehdr->e_phoff);
+        auto fileStream = new nn::sl::FileStream;
+        auto *fsClient = (FSClient *) memalign(0x40, sizeof(FSClient));
+        memset(fsClient, 0, sizeof(*fsClient));
+        FSAddClient(fsClient, FS_ERROR_FLAG_NONE);
 
-    for(i = 0; i < ehdr->e_phnum; i++) {
-        if(phdrs[i].p_type != PT_LOAD)
-            continue;
+        fileStream->Initialize(fsClient, &cmdBlock, path, "r");
 
-        if(phdrs[i].p_filesz > phdrs[i].p_memsz)
-            continue;
+        auto database = new nn::sl::LaunchInfoDatabase;
+        database->Load(fileStream, nn::sl::REGION_EUR);
+        
+        CCRAppLaunchParam data;    // load sys caffeine data
+        // load app launch param
+        CCRSysCaffeineGetAppLaunchParam(&data);
+        
+        nn::act::Initialize();        
+        for(int i = 0; i < 13; i++){
+            char uuid[16];
+            auto result = nn::act::GetUuidEx(uuid, i);            
+            if(result.IsSuccess()){                
+                if( memcmp(uuid, data.uuid, 8) == 0) {
+                    DEBUG_FUNCTION_LINE("Load Console account %d", i);
+                    nn::act::LoadConsoleAccount(i, 0, 0, 0);
+                    break;
+                }
+            }
+        }        
+        nn::act::Finalize();
 
-        if(!phdrs[i].p_filesz)
-            continue;
+        // get launch info for id
+        nn::sl::LaunchInfo info;
+        database->GetLaunchInfoById(&info, data.titleId);
 
-        unsigned int p_paddr = phdrs[i].p_paddr;
-        image = (unsigned char *) (elfstart + phdrs[i].p_offset);
+        // info.titleId
+        OSReport("Quick boot into: %016llX\n", info.titleId);
 
-        memcpy ((void *) p_paddr, image, phdrs[i].p_filesz);
-        DCFlushRange((void*)p_paddr, phdrs[i].p_filesz);
+        delete database;
+        delete fileStream;
 
-        if(phdrs[i].p_flags & PF_X)
-            ICInvalidateRange ((void *) p_paddr, phdrs[i].p_memsz);
+        FSDelClient(fsClient, FS_ERROR_FLAG_NONE);
+
+        nn::sl::Finalize();
+        
+        MCPTitleListType titleInfo;
+        int32_t handle = MCP_Open();
+        MCP_GetTitleInfo(handle, info.titleId, &titleInfo);
+        MCP_Close(handle);
+        ACPAssignTitlePatch(&titleInfo);                 
+       _SYSLaunchTitleWithStdArgsInNoSplash(info.titleId, nullptr);
+       
+       
+        return true;        
+    } else {
+        OSReport("No quick boot\n");
     }
-
-    //! clear BSS
-    Elf32_Shdr *shdr = (Elf32_Shdr *) (elfstart + ehdr->e_shoff);
-    for(i = 0; i < ehdr->e_shnum; i++) {
-        const char *section_name = ((const char*)elfstart) + shdr[ehdr->e_shstrndx].sh_offset + shdr[i].sh_name;
-        if(section_name[0] == '.' && section_name[1] == 'b' && section_name[2] == 's' && section_name[3] == 's') {
-            memset((void*)shdr[i].sh_addr, 0, shdr[i].sh_size);
-            DCFlushRange((void*)shdr[i].sh_addr, shdr[i].sh_size);
-        } else if(section_name[0] == '.' && section_name[1] == 's' && section_name[2] == 'b' && section_name[3] == 's' && section_name[4] == 's') {
-            memset((void*)shdr[i].sh_addr, 0, shdr[i].sh_size);
-            DCFlushRange((void*)shdr[i].sh_addr, shdr[i].sh_size);
-        }
-    }
-
-    return ehdr->e_entry;
+    return false;
 }
 
+static void initExternalStorage(void) {
+    Initialize__Q2_2nn3spmFv();
+    SetAutoFatal__Q2_2nn3spmFb(false);
+
+    int storageIndex[2]{};
+    SetExtendedStorage__Q2_2nn3spmFQ3_2nn3spm12StorageIndex(storageIndex);
+
+    int volumeId[4]{};
+    SetDefaultExtendedStorageVolumeId__Q2_2nn3spmFRCQ3_2nn3spm8VolumeId(volumeId);
+}
+
+void bootHomebrewLauncher(void) {    
+    uint64_t titleId = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_MII_MAKER);
+    _SYSLaunchTitleWithStdArgsInNoSplash(titleId, nullptr);
+}
+
+
+extern "C" void _SYSLaunchMenuWithCheckingAccount(nn::act::SlotNo slot);
+
 int main(int argc, char **argv) {
-    uint32_t res = load_elf_image(payload_elf);
-    if(res != 0) {
-        ((int (*)(int, char **)) res)(0, nullptr);
+     if(!WHBLogModuleInit()){
+        WHBLogCafeInit();
+        WHBLogUdpInit();
     }
+    initExternalStorage();
     
+    InstallHBL();
+    
+    if(!getQuickBoot())  { 
+        bootHomebrewLauncher();
+    }
+
     return 0;
 }
