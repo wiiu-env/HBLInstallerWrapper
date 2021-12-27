@@ -1,5 +1,5 @@
-#include <stdint.h>
-#include <string.h>
+#include <cstdint>
+#include <cstring>
 #include <malloc.h>
 #include <coreinit/dynload.h>
 #include <coreinit/debug.h>
@@ -34,6 +34,7 @@ extern "C" void SC_0x25_KernelCopyData(unsigned int addr, unsigned int src, unsi
 
 
 void __attribute__ ((noinline)) kern_write(void *addr, uint32_t value);
+
 static void InstallPatches();
 
 static unsigned int load_elf_image(const uint8_t *elfstart) {
@@ -73,7 +74,7 @@ static unsigned int load_elf_image(const uint8_t *elfstart) {
     }
 
     //! clear BSS
-    Elf32_Shdr *shdr = (Elf32_Shdr *) (elfstart + ehdr->e_shoff);
+    auto *shdr = (Elf32_Shdr *) (elfstart + ehdr->e_shoff);
     for (i = 0; i < ehdr->e_shnum; i++) {
         const char *section_name = ((const char *) elfstart) + shdr[ehdr->e_shstrndx].sh_offset + shdr[i].sh_name;
         if (section_name[0] == '.' && section_name[1] == 'b' && section_name[2] == 's' && section_name[3] == 's') {
@@ -92,8 +93,8 @@ void KernelWriteU32(uint32_t addr, uint32_t value) {
     ICInvalidateRange(&value, 4);
     DCFlushRange(&value, 4);
 
-    uint32_t dst = (uint32_t) OSEffectiveToPhysical((uint32_t) addr);
-    uint32_t src = (uint32_t) OSEffectiveToPhysical((uint32_t) &value);
+    auto dst = (uint32_t) OSEffectiveToPhysical((uint32_t) addr);
+    auto src = (uint32_t) OSEffectiveToPhysical((uint32_t) &value);
 
     SC_0x25_KernelCopyData(dst, src, 4);
 
@@ -115,10 +116,10 @@ void InstallHBL() {
     kern_write((void *) (KERN_SYSCALL_TBL_5 + (0x36 * 4)), (unsigned int) KernelPatches);
 
     Syscall_0x36();
-        
+
     InstallPatches();
 
-    unsigned char *pElfBuffer = (unsigned char *) sd_loader_elf; // use this address as temporary to load the elf
+    auto *pElfBuffer = (unsigned char *) sd_loader_elf; // use this address as temporary to load the elf
     unsigned int mainEntryPoint = load_elf_image(pElfBuffer);
 
     if (mainEntryPoint == 0) {
@@ -144,16 +145,16 @@ static void InstallPatches() {
     unsigned int bufferU32;
     /* Pre-setup a few options to defined values */
     bufferU32 = 550;
-    memcpy((void*)&OS_FIRMWARE, &bufferU32, sizeof(bufferU32));
+    memcpy((void *) &OS_FIRMWARE, &bufferU32, sizeof(bufferU32));
     bufferU32 = 0xDEADC0DE;
-    memcpy((void*)&MAIN_ENTRY_ADDR, &bufferU32, sizeof(bufferU32));
-    memcpy((void*)&ELF_DATA_ADDR, &bufferU32, sizeof(bufferU32));
+    memcpy((void *) &MAIN_ENTRY_ADDR, &bufferU32, sizeof(bufferU32));
+    memcpy((void *) &ELF_DATA_ADDR, &bufferU32, sizeof(bufferU32));
     bufferU32 = 0;
-    memcpy((void*)&ELF_DATA_SIZE, &bufferU32, sizeof(bufferU32));
-    memcpy((void*)&HBL_CHANNEL, &bufferU32, sizeof(bufferU32));
+    memcpy((void *) &ELF_DATA_SIZE, &bufferU32, sizeof(bufferU32));
+    memcpy((void *) &HBL_CHANNEL, &bufferU32, sizeof(bufferU32));
 
-    osSpecificFunctions.addr_OSDynLoad_Acquire = (unsigned int)OSDynLoad_Acquire;
-    osSpecificFunctions.addr_OSDynLoad_FindExport = (unsigned int)OSDynLoad_FindExport;
+    osSpecificFunctions.addr_OSDynLoad_Acquire = (unsigned int) OSDynLoad_Acquire;
+    osSpecificFunctions.addr_OSDynLoad_FindExport = (unsigned int) OSDynLoad_FindExport;
 
     osSpecificFunctions.addr_KernSyscallTbl1 = KERN_SYSCALL_TBL_1;
     osSpecificFunctions.addr_KernSyscallTbl2 = KERN_SYSCALL_TBL_2;
@@ -167,32 +168,32 @@ static void InstallPatches() {
     osSpecificFunctions.addr_PrepareTitle_hook = address_PrepareTitle_hook;
     osSpecificFunctions.addr_sgIsLoadingBuffer = address_sgIsLoadingBuffer;
     osSpecificFunctions.addr_gDynloadInitialized = address_gDynloadInitialized;
-    osSpecificFunctions.orig_LiWaitOneChunkInstr = *(unsigned int*)address_LiWaitOneChunk;
+    osSpecificFunctions.orig_LiWaitOneChunkInstr = *(unsigned int *) address_LiWaitOneChunk;
 
     //! pointer to main entry point of a title
     osSpecificFunctions.addr_OSTitle_main_entry = ADDRESS_OSTitle_main_entry_ptr;
 
-    memcpy((void*)OS_SPECIFICS, &osSpecificFunctions, sizeof(OsSpecifics));
+    memcpy((void *) OS_SPECIFICS, &osSpecificFunctions, sizeof(OsSpecifics));
 }
 
 /* Write a 32-bit word with kernel permissions */
 void __attribute__ ((noinline)) kern_write(void *addr, uint32_t value) {
     asm volatile (
-        "li 3,1\n"
-        "li 4,0\n"
-        "mr 5,%1\n"
-        "li 6,0\n"
-        "li 7,0\n"
-        "lis 8,1\n"
-        "mr 9,%0\n"
-        "mr %1,1\n"
-        "li 0,0x3500\n"
-        "sc\n"
-        "nop\n"
-        "mr 1,%1\n"
-        :
-        :	"r"(addr), "r"(value)
-        :	"memory", "ctr", "lr", "0", "3", "4", "5", "6", "7", "8", "9", "10",
-        "11", "12"
+    "li 3,1\n"
+    "li 4,0\n"
+    "mr 5,%1\n"
+    "li 6,0\n"
+    "li 7,0\n"
+    "lis 8,1\n"
+    "mr 9,%0\n"
+    "mr %1,1\n"
+    "li 0,0x3500\n"
+    "sc\n"
+    "nop\n"
+    "mr 1,%1\n"
+    :
+    :    "r"(addr), "r"(value)
+    :    "memory", "ctr", "lr", "0", "3", "4", "5", "6", "7", "8", "9", "10",
+    "11", "12"
     );
 }
