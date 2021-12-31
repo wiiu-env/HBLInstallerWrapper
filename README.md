@@ -3,8 +3,8 @@ A simple wrapper that is just installing the sd_loader to load homebrew via the 
 
 ## Usage
 Place the `50_hbl_installer.rpx` in the `[ENVIRONMENT]/modules/setup` folder and run the [EnvironmentLoader](https://github.com/wiiu-env/EnvironmentLoader).
-Requires the [homebrew_launcher.elf](https://github.com/dimok789/homebrew_launcher) in `sd:/wiiu/apps/homebrew_launcher/homebrew_launcher.elf`.
-Requires [AutobootModule](https://github.com/wiiu-env/AutobootModule) to actually launch the Wii U Menu or Homebrew Launcher.
+- Requires [homebrew_launcher.elf](https://github.com/dimok789/homebrew_launcher) in `sd:/wiiu/apps/homebrew_launcher/homebrew_launcher.elf`.
+- Requires [AutobootModule](https://github.com/wiiu-env/AutobootModule) to actually launch the Wii U Menu or Homebrew Launcher.
 
 ## Building
 
