@@ -147,6 +147,20 @@ KernelPatches:
     eieio
     isync
 
+    # Patch syscall 0x65 to return 0xb00b0000
+    lis        r3,-0x18    
+    ori        r3,r3,0x5204
+    lis        r4,0x3c60
+    ori        r4,r4,0xb00b
+    lwz        r3,0x0(r3)
+    stw        r4,0x0(r3)
+    rlwinm     r3,r3,0x0,0x0,0x1a
+    dcbf       0,r3
+    icbi       0,r3
+    sync       0x0
+    eieio
+    isync
+
     # write "nop" to some positions
     lis r4, 0x6000
     # nop on IBATU 4 and DBAT 5 set/reset
