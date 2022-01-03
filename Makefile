@@ -33,6 +33,11 @@ CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__
 
 CXXFLAGS	:= $(CFLAGS) -std=c++20 
 
+ifeq ($(DEBUG),1)    
+CXXFLAGS += -DDEBUG -g
+CCFLAGS += -DDEBUG -g
+endif
+
 ASFLAGS	:=	-g $(ARCH) -mregnames
 LDFLAGS	=	-g $(ARCH) $(RPXSPECS) --entry=_start -Wl,-Map,$(notdir $*.map)
 
@@ -80,7 +85,7 @@ endif
 
 export OFILES_BIN	:=	$(addsuffix .o,$(BINFILES))
 export OFILES_SRC	:=	$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
-export OFILES 	:=	$(OFILES_BIN) $(OFILES_SRC) sd_loader.elf.o
+export OFILES 	:=	$(OFILES_BIN) $(OFILES_SRC) sd_loader.elf.o patches.elf.o
 export HFILES_BIN	:=	$(addsuffix .h,$(subst .,_,$(BINFILES)))
 
 export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
@@ -97,12 +102,14 @@ all: $(BUILD)
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	make -C homebrew_launcher_installer/sd_loader
+	make -C patches
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #-------------------------------------------------------------------------------
 clean:
 	@echo clean ...
 	make clean -C homebrew_launcher_installer/sd_loader
+	make clean -C patches
 	@rm -fr $(BUILD) $(TARGET).rpx $(TARGET).elf
 
 #-------------------------------------------------------------------------------
@@ -116,15 +123,19 @@ DEPENDS	:=	$(OFILES:.o=.d)
 #-------------------------------------------------------------------------------
 
 sd_loader := ../homebrew_launcher_installer/sd_loader/sd_loader.elf
+patches := ../patches/patches.elf
 
 all	:	 $(OUTPUT).rpx
 
 $(sd_loader): 
 	make -C ../homebrew_launcher_installer/sd_loader
 
+$(patches):
+	make -C ../patches
+
 $(OUTPUT).rpx	:	$(OUTPUT).elf
 $(OUTPUT).elf	:   $(OFILES)
-$(OFILES)       :   sd_loader.h
+$(OFILES)       :   sd_loader.h patches.h
 
 $(OFILES_SRC)	: $(HFILES_BIN)
 
@@ -133,13 +144,9 @@ $(OFILES_SRC)	: $(HFILES_BIN)
 #-------------------------------------------------------------------------------
 sd_loader.h: $(sd_loader)
 	@bin2s -a 32 -H `(echo $(<F) | tr . _)`.h $< | $(AS) -o $(<F).o
-	@echo '#pragma once'  > $@
-	@printf '#include "' >> $@
-	@(printf $(<F) | tr . _) >> $@
-	@echo '.h"' >> $@
-	@printf '#define PAYLOAD_HASH "' >> $@ 
-	@sha1sum $(<) |  cut -f1 -d' ' | tr -d '\n' >> $@
-	@printf '"' >> $@ 
+
+patches.h: $(patches)
+	@bin2s -a 32 -H `(echo $(<F) | tr . _)`.h $< | $(AS) -o $(<F).o
 
 #-------------------------------------------------------------------------------
 endif
