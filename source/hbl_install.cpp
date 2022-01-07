@@ -117,6 +117,7 @@ void InstallHBL() {
 
     unsigned int bufferU32 = 0x48000003 | jump_addr;
     KernelWriteU32(repl_addr, bufferU32);
+    MAIN_ENTRY_ADDR = 0xDEADC0DE;
 }
 
 /*
