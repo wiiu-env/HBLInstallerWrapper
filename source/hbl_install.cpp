@@ -145,21 +145,16 @@ static void InstallPatches() {
     OsSpecifics osSpecificFunctions;
     memset(&osSpecificFunctions, 0, sizeof(OsSpecifics));
 
-    unsigned int bufferU32;
     /* Pre-setup a few options to defined values */
-    bufferU32 = 550;
-    memcpy((void *) &OS_FIRMWARE, &bufferU32, sizeof(bufferU32));
-    bufferU32 = 0xDEADC0DE;
-    memcpy((void *) &MAIN_ENTRY_ADDR, &bufferU32, sizeof(bufferU32));
-    memcpy((void *) &ELF_DATA_ADDR, &bufferU32, sizeof(bufferU32));
-    bufferU32 = 0;
-    memcpy((void *) &ELF_DATA_SIZE, &bufferU32, sizeof(bufferU32));
-    memcpy((void *) &HBL_CHANNEL, &bufferU32, sizeof(bufferU32));
+    OS_FIRMWARE = 550;
+    MAIN_ENTRY_ADDR = 0x00802000;
+    ELF_DATA_ADDR = 0xDEADC0DE;
+    ELF_DATA_SIZE = 0;
+    HBL_CHANNEL = 0;
 
     // If we install the sd_loader but don't have any homebrew loaded some applications won't start.
     // We load a stub that just opens the real app and opens the hbl when opening the mii maker.
     memcpy((void *) 0x00802000, homebrew_stub, sizeof(homebrew_stub));
-    MAIN_ENTRY_ADDR = 0x00802000;
 
     osSpecificFunctions.addr_OSDynLoad_Acquire = (unsigned int) OSDynLoad_Acquire;
     osSpecificFunctions.addr_OSDynLoad_FindExport = (unsigned int) OSDynLoad_FindExport;
