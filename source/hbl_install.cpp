@@ -151,6 +151,7 @@ static void InstallPatches() {
 
     /* Pre-setup a few options to defined values */
     OS_FIRMWARE = 550;
+    MAIN_ENTRY_ADDR = 0x00802000;
     ELF_DATA_ADDR = 0xDEADC0DE;
     ELF_DATA_SIZE = 0;
     HBL_CHANNEL = 0;
